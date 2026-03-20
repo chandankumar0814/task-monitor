@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0a0e14;
+  --color-surface: #161b22;
+  --color-primary-blue: #3b82f6;
+  --color-primary-purple: #8b5cf6;
+
+  --animate-gradient: gradient 8s linear infinite;
+
+  @keyframes gradient {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-white antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-blue to-primary-purple;
+}
+
+.glass {
+  @apply bg-surface/60 backdrop-blur-xl border border-white/10;
+}
+
+.btn-gradient {
+  @apply bg-gradient-to-r from-primary-blue to-primary-purple hover:opacity-90 transition-opacity;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
