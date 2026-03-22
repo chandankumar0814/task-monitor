@@ -12,10 +12,54 @@ const App = () => {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Use a ref to store tasks for the reminder logic to avoid effect loops
+  const tasksRef = useRef<any[]>([]);
+  tasksRef.current = tasks;
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Reminder Logic
+  useEffect(() => {
+    // Request notification permissions
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+
+    const notifiedTasks = new Set<string>();
+
+    const interval = setInterval(async () => {
+      const now = new Date();
+      const currentTimeString = format(now, 'HH:mm');
+
+      tasksRef.current.forEach(async (task) => {
+        const taskKey = `${task.id}-${currentTimeString}`;
+        
+        if (!task.completed && task.time === currentTimeString && !notifiedTasks.has(taskKey)) {
+          notifiedTasks.add(taskKey);
+
+          if ('serviceWorker' in navigator) {
+            const registration = await navigator.serviceWorker.ready;
+            registration.showNotification('TaskFlow Reminder', {
+              body: `Time for: ${task.task || task.title}`,
+              icon: '/favicon.svg',
+              vibrate: [200, 100, 200],
+              tag: taskKey,
+              badge: '/favicon.svg'
+            });
+          } else {
+            alert(`⏰ ALARM: ${task.title} (${task.time})`);
+          }
+        }
+      });
+
+      if (now.getMinutes() === 0) notifiedTasks.clear();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (showAddSheet) {
