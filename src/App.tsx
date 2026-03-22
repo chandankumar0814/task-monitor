@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, CheckCircle2, Calendar, Clock, ChevronRight, Check } from 'lucide-react';
 import { format, isToday, isFuture, parseISO } from 'date-fns';
@@ -12,54 +12,46 @@ const App = () => {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  // Use a ref to store tasks for the reminder logic to avoid effect loops
-  const tasksRef = useRef<any[]>([]);
-  tasksRef.current = tasks;
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
 
-  // Reminder Logic
+  // Request notification permissions and sync existing alarms on load
   useEffect(() => {
-    // Request notification permissions
     if ('Notification' in window && Notification.permission !== 'granted') {
       Notification.requestPermission();
     }
-
-    const notifiedTasks = new Set<string>();
-
-    const interval = setInterval(async () => {
-      const now = new Date();
-      const currentTimeString = format(now, 'HH:mm');
-
-      tasksRef.current.forEach(async (task) => {
-        const taskKey = `${task.id}-${currentTimeString}`;
-        
-        if (!task.completed && task.time === currentTimeString && !notifiedTasks.has(taskKey)) {
-          notifiedTasks.add(taskKey);
-
-          if ('serviceWorker' in navigator) {
-            const registration = await navigator.serviceWorker.ready;
-            registration.showNotification('TaskFlow Reminder', {
-              body: `Time for: ${task.task || task.title}`,
-              icon: '/favicon.svg',
-              vibrate: [200, 100, 200],
-              tag: taskKey,
-              badge: '/favicon.svg'
-            });
-          } else {
-            alert(`⏰ ALARM: ${task.title} (${task.time})`);
-          }
-        }
-      });
-
-      if (now.getMinutes() === 0) notifiedTasks.clear();
-    }, 10000);
-
-    return () => clearInterval(interval);
   }, []);
+
+  const scheduleAlarm = useCallback(async (taskId: number, taskTitle: string, taskDate: string, taskTime: string) => {
+    if ('serviceWorker' in navigator && Notification.permission === 'granted') {
+      const reg = await navigator.serviceWorker.ready;
+      
+      const fireAt = new Date(`${taskDate}T${taskTime}`).getTime();
+      const now = Date.now();
+
+      // Only schedule if it's in the future
+      if (fireAt > now) {
+        reg.active?.postMessage({
+          type: 'SCHEDULE_ALARM',
+          taskId: taskId.toString(),
+          title: '⏰ TaskFlow Reminder',
+          body: `It's time for: ${taskTitle}`,
+          fireAt
+        });
+      }
+    }
+  }, []);
+
+  // Sync alarms whenever tasks change (for newly added ones)
+  useEffect(() => {
+    tasks.forEach(task => {
+      if (!task.completed) {
+        scheduleAlarm(task.id!, task.title, task.date, task.time);
+      }
+    });
+  }, [tasks, scheduleAlarm]);
 
   useEffect(() => {
     if (showAddSheet) {
@@ -67,10 +59,10 @@ const App = () => {
     }
   }, [showAddSheet]);
 
-  const handleAddTask = (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    addTask(title, date, time);
+    await addTask(title, date, time);
     setTitle('');
     setShowAddSheet(false);
   };
